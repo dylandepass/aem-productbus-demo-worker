@@ -1,36 +1,21 @@
 /**
- * Orders API proxy worker.
+ * Commerce API proxy worker.
  * Forwards browser requests to the Helix Commerce API with server-side auth.
+ * Handles orders (service token), auth (public/user token), and customers (user token).
  */
 
-/**
- * Builds the upstream API base path.
- * @param {Object} env - Worker environment bindings
- * @returns {string}
- */
 function apiBase(env) {
   return `${env.API_ORIGIN}/${env.API_ORG}/sites/${env.API_SITE}`;
 }
 
-/**
- * Returns CORS headers for the given environment.
- * @param {Object} env - Worker environment bindings
- * @returns {Object}
- */
 function corsHeaders(env) {
   return {
     'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 }
 
-/**
- * Adds CORS headers to a response.
- * @param {Response} resp - Upstream response
- * @param {Object} env - Worker environment bindings
- * @returns {Response}
- */
 function withCORS(resp, env) {
   const headers = new Headers(resp.headers);
   const cors = corsHeaders(env);
@@ -42,27 +27,37 @@ function withCORS(resp, env) {
   });
 }
 
-/**
- * Parses the request path to extract route and orderId.
- * Expects: /orders or /orders/:orderId
- * @param {string} pathname
- * @returns {{ route: string, orderId?: string } | null}
- */
+function errorResponse(status, message) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 function matchRoute(pathname) {
   const segments = pathname.replace(/^\/+|\/+$/g, '').split('/');
-  if (segments[0] !== 'orders') return null;
-  return {
-    route: 'orders',
-    orderId: segments[1] || undefined,
-  };
+
+  if (segments[0] === 'auth' && segments[1]) {
+    return { route: 'auth', action: segments[1] };
+  }
+
+  if (segments[0] === 'orders') {
+    return { route: 'orders', orderId: segments[1] || undefined };
+  }
+
+  if (segments[0] === 'customers') {
+    return {
+      route: 'customers',
+      email: segments[1] || undefined,
+      subroute: segments[2] || undefined,
+    };
+  }
+
+  return null;
 }
 
 /**
- * Forwards a request to the Helix Commerce API with auth.
- * @param {string} url - Upstream URL
- * @param {Request} request - Original request
- * @param {Object} env - Worker environment bindings
- * @returns {Promise<Response>}
+ * Forward with service token (for orders).
  */
 async function forward(url, request, env) {
   console.log(`[worker] ${request.method} ${url}`);
@@ -91,6 +86,74 @@ async function forward(url, request, env) {
   return resp;
 }
 
+/**
+ * Forward with no auth token (public auth endpoints).
+ */
+async function forwardPublic(url, request) {
+  console.log(`[worker] ${request.method} ${url} (public)`);
+
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+
+  const init = { method: request.method, headers };
+  if (request.method === 'POST') {
+    init.body = request.body;
+  }
+
+  const resp = await fetch(url, init);
+  console.log(`[worker] upstream responded ${resp.status}`);
+  return resp;
+}
+
+/**
+ * Forward with user's own JWT from the Authorization header.
+ */
+async function forwardWithUserAuth(url, request) {
+  console.log(`[worker] ${request.method} ${url} (user auth)`);
+
+  const authHeader = request.headers.get('Authorization');
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');
+  if (authHeader) {
+    headers.set('Authorization', authHeader);
+  }
+
+  const init = { method: request.method, headers };
+  if (request.method === 'POST') {
+    init.body = request.body;
+  }
+
+  const resp = await fetch(url, init);
+  console.log(`[worker] upstream responded ${resp.status}`);
+  return resp;
+}
+
+/**
+ * Handle /auth/callback — extract JWT from upstream Set-Cookie and add to response body.
+ */
+async function handleAuthCallback(request, env) {
+  const resp = await forwardPublic(`${apiBase(env)}/auth/callback`, request);
+
+  if (!resp.ok) {
+    const body = await resp.text();
+    console.log(`[worker] auth callback error: ${body}`);
+    return new Response(body, {
+      status: resp.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const setCookie = resp.headers.get('Set-Cookie') || '';
+  const tokenMatch = setCookie.match(/auth_token=([^;]+)/);
+  const body = await resp.json();
+  body.token = tokenMatch ? tokenMatch[1] : null;
+
+  return new Response(JSON.stringify(body), {
+    status: resp.status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -102,36 +165,78 @@ export default {
 
     const match = matchRoute(url.pathname);
     if (!match) {
-      return withCORS(new Response(JSON.stringify({ error: 'Not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      }), env);
+      return withCORS(errorResponse(404, 'Not found'), env);
     }
 
-    // POST /orders → create order
-    if (request.method === 'POST' && !match.orderId) {
-      const upstream = `${apiBase(env)}/orders`;
-      const resp = await forward(upstream, request, env);
-      return withCORS(resp, env);
-    }
+    // --- Auth routes ---
 
-    // GET /orders/:orderId?email=... → retrieve order
-    if (request.method === 'GET' && match.orderId) {
-      const email = url.searchParams.get('email');
-      if (!email) {
-        return withCORS(new Response(JSON.stringify({ error: 'Missing email parameter' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }), env);
+    if (match.route === 'auth') {
+      if (request.method !== 'POST') {
+        return withCORS(errorResponse(405, 'Method not allowed'), env);
       }
-      const upstream = `${apiBase(env)}/customers/${encodeURIComponent(email)}/orders/${encodeURIComponent(match.orderId)}`;
-      const resp = await forward(upstream, request, env);
-      return withCORS(resp, env);
+
+      if (match.action === 'login') {
+        const resp = await forwardPublic(`${apiBase(env)}/auth/login`, request);
+        return withCORS(resp, env);
+      }
+
+      if (match.action === 'callback') {
+        const resp = await handleAuthCallback(request, env);
+        return withCORS(resp, env);
+      }
+
+      if (match.action === 'logout') {
+        const resp = await forwardWithUserAuth(`${apiBase(env)}/auth/logout`, request);
+        return withCORS(resp, env);
+      }
+
+      return withCORS(errorResponse(404, 'Not found'), env);
     }
 
-    return withCORS(new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    }), env);
+    // --- Customer routes ---
+
+    if (match.route === 'customers') {
+      if (request.method !== 'GET') {
+        return withCORS(errorResponse(405, 'Method not allowed'), env);
+      }
+
+      if (match.email && match.subroute === 'orders') {
+        const upstream = `${apiBase(env)}/customers/${encodeURIComponent(match.email)}/orders`;
+        const resp = await forwardWithUserAuth(upstream, request);
+        return withCORS(resp, env);
+      }
+
+      if (match.email) {
+        const upstream = `${apiBase(env)}/customers/${encodeURIComponent(match.email)}`;
+        const resp = await forwardWithUserAuth(upstream, request);
+        return withCORS(resp, env);
+      }
+
+      return withCORS(errorResponse(400, 'Missing email'), env);
+    }
+
+    // --- Order routes ---
+
+    if (match.route === 'orders') {
+      if (request.method === 'POST' && !match.orderId) {
+        const upstream = `${apiBase(env)}/orders`;
+        const resp = await forward(upstream, request, env);
+        return withCORS(resp, env);
+      }
+
+      if (request.method === 'GET' && match.orderId) {
+        const email = url.searchParams.get('email');
+        if (!email) {
+          return withCORS(errorResponse(400, 'Missing email parameter'), env);
+        }
+        const upstream = `${apiBase(env)}/customers/${encodeURIComponent(email)}/orders/${encodeURIComponent(match.orderId)}`;
+        const resp = await forward(upstream, request, env);
+        return withCORS(resp, env);
+      }
+
+      return withCORS(errorResponse(405, 'Method not allowed'), env);
+    }
+
+    return withCORS(errorResponse(404, 'Not found'), env);
   },
 };
