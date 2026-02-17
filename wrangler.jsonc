@@ -13,5 +13,7 @@
     "API_SITE": "aem-productbus-demo",
     "ALLOWED_ORIGIN": "*"
   }
-  // Secret: API_TOKEN (set via `npx wrangler secret put API_TOKEN`)
+  // Secrets (set via `npx wrangler secret put <NAME>`):
+  //   API_TOKEN
+  //   GOOGLE_PLACES_API_KEY
 }

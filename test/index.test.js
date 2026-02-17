@@ -124,6 +124,46 @@ describe('worker entry point', () => {
     assert.equal(resp.status, 200);
   });
 
+  it('routes GET /customers/:email/addresses', async () => {
+    fetchStub.resolves(new Response('{"addresses":[]}'));
+
+    const request = new Request('http://localhost/customers/a@b.com/addresses', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer jwt123' },
+    });
+    const resp = await worker.fetch(request, DEFAULT_ENV);
+
+    assert.equal(resp.status, 200);
+  });
+
+  it('routes POST /customers/:email/addresses', async () => {
+    fetchStub.resolves(new Response('{"address":{}}'));
+
+    const request = new Request('http://localhost/customers/a@b.com/addresses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer jwt123',
+      },
+      body: '{"name":"Test","address1":"123 Main"}',
+    });
+    const resp = await worker.fetch(request, DEFAULT_ENV);
+
+    assert.equal(resp.status, 200);
+  });
+
+  it('routes DELETE /customers/:email/addresses/:addressId', async () => {
+    fetchStub.resolves(new Response('{"success":true}'));
+
+    const request = new Request('http://localhost/customers/a@b.com/addresses/abc123', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer jwt123' },
+    });
+    const resp = await worker.fetch(request, DEFAULT_ENV);
+
+    assert.equal(resp.status, 200);
+  });
+
   it('handles percent-encoded email in URL', async () => {
     fetchStub.resolves(new Response('{"customer":{}}'));
 
