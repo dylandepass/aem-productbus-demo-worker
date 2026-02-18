@@ -2,25 +2,6 @@
 
 Cloudflare Worker that serves as the middleware layer between the [AEM Product Bus Demo](https://github.com/dylandepass/aem-productbus-demo) storefront and the Helix Commerce API. It handles authentication, order management, customer profiles, Stripe payments, and address autocomplete.
 
-## Architecture
-
-```
-Browser (EDS storefront)
-  │
-  ├─ /auth/*            ──► Helix Commerce API (passwordless login)
-  ├─ /orders/*          ──► Helix Commerce API (order CRUD)
-  ├─ /customers/*       ──► Helix Commerce API (profiles, addresses)
-  ├─ /checkout          ──► Stripe API (create checkout session)
-  ├─ /checkout/session  ──► Stripe API (retrieve session status)
-  ├─ /places/*          ──► Google Places API (address autocomplete)
-  │
-Stripe (server-to-server)
-  │
-  └─ /webhooks/stripe   ──► Verify signature ──► Helix Commerce API (create order)
-```
-
-The worker never stores data itself — it proxies requests with appropriate authentication and transforms responses where needed.
-
 ## Getting started
 
 ### Prerequisites
@@ -40,7 +21,7 @@ npm install
 The worker requires several secrets that are not committed to source control:
 
 ```bash
-# Helix Commerce API token (SUPERUSER_KEY)
+# Helix Commerce API token
 npx wrangler secret put API_TOKEN
 
 # Google Places API key (for address autocomplete)
@@ -318,52 +299,13 @@ curl "https://{worker-url}/places/details?place_id=ChIJ...&sessiontoken=uuid"
 
 **Origin restrictions:** These endpoints only accept requests from allowed origins (the AEM EDS preview/live/network domains and `localhost:3000`).
 
----
-
-## Project structure
-
-```
-src/
-├── index.js                        # Worker entry point, request routing, CORS
-├── routes/
-│   ├── index.js                    # Route registry
-│   ├── auth/
-│   │   ├── handler.js              # Auth action dispatcher
-│   │   ├── login.js                # POST /auth/login
-│   │   ├── callback.js             # POST /auth/callback (extracts JWT from cookie)
-│   │   └── logout.js               # POST /auth/logout
-│   ├── orders/
-│   │   ├── handler.js              # Orders dispatcher
-│   │   ├── create.js               # POST /orders
-│   │   └── retrieve.js             # GET /orders/:orderId
-│   ├── customers/
-│   │   ├── handler.js              # Customers dispatcher
-│   │   ├── profile.js              # GET /customers/:email
-│   │   ├── orders.js               # GET /customers/:email/orders
-│   │   └── addresses.js            # CRUD /customers/:email/addresses
-│   ├── checkout/
-│   │   └── handler.js              # Stripe checkout session (create + retrieve)
-│   ├── webhooks/
-│   │   └── stripe.js               # Stripe webhook handler
-│   └── places/
-│       └── handler.js              # Google Places proxy
-└── utils/
-    ├── proxy.js                    # Upstream API proxy (apiBase, proxyFetch)
-    ├── http.js                     # ResponseError class, error responses
-    ├── cors.js                     # CORS headers, preflight handling
-    ├── stripe.js                   # Stripe REST API helper, webhook signature verification
-    └── router/
-        ├── index.js                # Tree-based URL router
-        └── node.js                 # Router tree node
-```
-
 ## Authentication modes
 
 The `proxyFetch()` utility supports four auth modes for upstream API calls:
 
 | Mode | Behavior | Used by |
 |------|----------|---------|
-| `token` | Uses `API_TOKEN` (SUPERUSER_KEY) | Server-side operations |
+| `token` | Uses `API_TOKEN` | Server-side operations |
 | `user` | Passes the user's `Authorization` header | Logout |
 | `auto` | Prefers user JWT, falls back to `API_TOKEN` | Orders, customers, addresses |
 | `public` | No `Authorization` header | Login, callback |
