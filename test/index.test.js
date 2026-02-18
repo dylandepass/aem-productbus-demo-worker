@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it, beforeEach, afterEach } from 'mocha';
 import sinon from 'sinon';
+import esmock from 'esmock';
 import { DEFAULT_ENV } from './fixtures/context.js';
 import worker from '../src/index.js';
+import { ResponseError } from '../src/utils/http.js';
 
 describe('worker entry point', () => {
   let fetchStub;
@@ -208,5 +210,82 @@ describe('worker entry point', () => {
     const resp = await worker.fetch(request, DEFAULT_ENV);
 
     assert.equal(resp.status, 404);
+  });
+
+  // --- Webhook routes skip CORS ---
+
+  it('skips CORS on webhook success response', async () => {
+    // Webhook handler returns 400 for missing signature, no CORS headers
+    const request = new Request('http://localhost/webhooks/stripe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const resp = await worker.fetch(request, {
+      ...DEFAULT_ENV,
+      STRIPE_WEBHOOK_SECRET: 'whsec_test',
+    });
+
+    // Missing signature returns 400 from the handler (not a thrown error)
+    assert.equal(resp.status, 400);
+    assert.equal(resp.headers.get('Access-Control-Allow-Origin'), null);
+  });
+
+  it('skips CORS on webhook ResponseError', async () => {
+    // Use esmock to inject a webhook handler that throws ResponseError
+    const mockRouter = {
+      match: (method, path) => {
+        if (method === 'POST' && path === '/webhooks/stripe') {
+          return {
+            handler: () => { throw new ResponseError(422, 'Bad data'); },
+            params: {},
+          };
+        }
+        return null;
+      },
+    };
+
+    const mockWorker = (await esmock('../src/index.js', {
+      '../src/routes/index.js': { default: mockRouter },
+    })).default;
+
+    const request = new Request('http://localhost/webhooks/stripe', {
+      method: 'POST',
+    });
+    const resp = await mockWorker.fetch(request, DEFAULT_ENV);
+
+    assert.equal(resp.status, 422);
+    assert.equal(resp.headers.get('Access-Control-Allow-Origin'), null);
+    const body = await resp.json();
+    assert.equal(body.error, 'Bad data');
+  });
+
+  it('skips CORS on webhook unexpected error', async () => {
+    // Use esmock to inject a webhook handler that throws a generic error
+    const mockRouter = {
+      match: (method, path) => {
+        if (method === 'POST' && path === '/webhooks/stripe') {
+          return {
+            handler: () => { throw new Error('unexpected'); },
+            params: {},
+          };
+        }
+        return null;
+      },
+    };
+
+    const mockWorker = (await esmock('../src/index.js', {
+      '../src/routes/index.js': { default: mockRouter },
+    })).default;
+
+    const request = new Request('http://localhost/webhooks/stripe', {
+      method: 'POST',
+    });
+    const resp = await mockWorker.fetch(request, DEFAULT_ENV);
+
+    assert.equal(resp.status, 500);
+    assert.equal(resp.headers.get('Access-Control-Allow-Origin'), null);
+    const body = await resp.json();
+    assert.equal(body.error, 'Internal server error');
   });
 });

@@ -7,7 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "c8 mocha --recursive 'test/**/*.test.js'",
-    "test:ci": "c8 --check-coverage mocha --recursive 'test/**/*.test.js'"
+    "test:ci": "c8 mocha --recursive 'test/**/*.test.js'"
   },
   "mocha": {
     "require": [

@@ -21,14 +21,19 @@ export default {
       return withCORS(errorResponse(404, 'Not found'), env);
     }
 
+    // Webhook routes are server-to-server — skip CORS
+    const skipCORS = path.startsWith('/webhooks/');
+
     try {
       const resp = await match.handler(request, { env, params: match.params });
-      return withCORS(resp, env);
+      return skipCORS ? resp : withCORS(resp, env);
     } catch (err) {
       if (err instanceof ResponseError) {
-        return withCORS(errorResponse(err.status, err.message), env);
+        const errResp = errorResponse(err.status, err.message);
+        return skipCORS ? errResp : withCORS(errResp, env);
       }
-      return withCORS(errorResponse(500, 'Internal server error'), env);
+      const errResp = errorResponse(500, 'Internal server error');
+      return skipCORS ? errResp : withCORS(errResp, env);
     }
   },
 };
