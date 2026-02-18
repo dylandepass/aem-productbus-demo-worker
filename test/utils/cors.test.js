@@ -9,7 +9,7 @@ describe('utils/cors', () => {
     it('returns CORS headers with configured origin', () => {
       const h = corsHeaders(env);
       assert.equal(h['Access-Control-Allow-Origin'], 'https://example.com');
-      assert.equal(h['Access-Control-Allow-Methods'], 'GET, POST, OPTIONS');
+      assert.equal(h['Access-Control-Allow-Methods'], 'GET, POST, DELETE, OPTIONS');
       assert.equal(h['Access-Control-Allow-Headers'], 'Content-Type, Authorization');
     });
 
