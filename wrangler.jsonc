@@ -11,9 +11,11 @@
     "API_ORIGIN": "https://api.adobecommerce.live",
     "API_ORG": "dylandepass",
     "API_SITE": "aem-productbus-demo",
-    "ALLOWED_ORIGIN": "*"
+    "ALLOWED_ORIGIN": "*",
+    "PAYPAL_CLIENT_ID": "AYfXbmal8BOpF1lesKHv4Cf1jRGYLaFnz2X8sq1YKdQGhARrLhFngnJBTmFQOp8qD1kIIItrC36YPc-w"
   }
   // Secrets (set via `npx wrangler secret put <NAME>`):
   //   API_TOKEN
   //   GOOGLE_PLACES_API_KEY
+  //   PAYPAL_SECRET
 }

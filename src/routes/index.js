@@ -10,6 +10,7 @@ import customerAddresses from './customers/addresses.js';
 import placesHandler from './places/handler.js';
 import { createCheckoutSession, getCheckoutSession } from './checkout/handler.js';
 import stripeWebhookHandler from './webhooks/stripe.js';
+import { createPayPalOrder, capturePayPalOrder, getPayPalOrder } from './paypal/handler.js';
 
 const router = new Router();
 
@@ -26,5 +27,8 @@ router.add('GET', '/places/:action', placesHandler);
 router.add('POST', '/checkout', createCheckoutSession);
 router.add('GET', '/checkout/session', getCheckoutSession);
 router.add('POST', '/webhooks/stripe', stripeWebhookHandler);
+router.add('POST', '/paypal/orders', createPayPalOrder);
+router.add('POST', '/paypal/orders/:orderId/capture', capturePayPalOrder);
+router.add('GET', '/paypal/orders/:orderId', getPayPalOrder);
 
 export default router;

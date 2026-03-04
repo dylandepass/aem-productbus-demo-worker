@@ -4,36 +4,8 @@
  */
 
 import { verifyWebhookSignature } from '../../utils/stripe.js';
+import { buildOrderPayload } from '../../utils/order.js';
 import { apiBase } from '../../utils/proxy.js';
-
-/**
- * Build the order payload for the Commerce API from Stripe session metadata.
- */
-function buildOrderPayload(metadata) {
-  const customer = JSON.parse(metadata.customer);
-  const shipping = JSON.parse(metadata.shipping);
-  const items = JSON.parse(metadata.items);
-
-  return {
-    customer,
-    shipping,
-    items: items.map((item) => {
-      // Image is stored as media_<hash>.<ext> short reference
-      const image = item.image || '';
-      return {
-        sku: item.sku,
-        urlKey: (item.url || '').split('/').pop() || '',
-        name: item.name,
-        quantity: item.quantity,
-        price: {
-          currency: item.currency || 'USD',
-          final: String(item.price),
-        },
-        custom: { image, url: item.url || '' },
-      };
-    }),
-  };
-}
 
 export default async function stripeWebhookHandler(request, { env }) {
   const payload = await request.text();
@@ -60,7 +32,11 @@ export default async function stripeWebhookHandler(request, { env }) {
     const session = event.data.object;
 
     if (session.payment_status === 'paid') {
-      const orderPayload = buildOrderPayload(session.metadata);
+      const orderPayload = buildOrderPayload({
+        customer: JSON.parse(session.metadata.customer),
+        shipping: JSON.parse(session.metadata.shipping),
+        items: JSON.parse(session.metadata.items),
+      });
 
       const orderResp = await fetch(`${apiBase(env)}/orders`, {
         method: 'POST',
