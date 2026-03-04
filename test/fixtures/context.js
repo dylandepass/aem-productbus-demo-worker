@@ -8,6 +8,8 @@ export const DEFAULT_ENV = {
   API_SITE: 'testsite',
   API_TOKEN: 'test-service-token',
   ALLOWED_ORIGIN: 'https://example.com',
+  PAYPAL_CLIENT_ID: 'test-paypal-client-id',
+  PAYPAL_SECRET: 'test-paypal-secret',
 };
 
 /**
