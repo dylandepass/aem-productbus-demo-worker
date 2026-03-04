@@ -11,6 +11,8 @@ import placesHandler from './places/handler.js';
 import { createCheckoutSession, getCheckoutSession } from './checkout/handler.js';
 import stripeWebhookHandler from './webhooks/stripe.js';
 import { createPayPalOrder, capturePayPalOrder, getPayPalOrder } from './paypal/handler.js';
+import { createPaymentIntent, capturePaymentIntent, getPaymentIntent } from './stripe/handler.js';
+import { applePayDomainAssociation } from './well-known/handler.js';
 
 const router = new Router();
 
@@ -30,5 +32,10 @@ router.add('POST', '/webhooks/stripe', stripeWebhookHandler);
 router.add('POST', '/paypal/orders', createPayPalOrder);
 router.add('POST', '/paypal/orders/:orderId/capture', capturePayPalOrder);
 router.add('GET', '/paypal/orders/:orderId', getPayPalOrder);
+router.add('POST', '/stripe/payment-intents', createPaymentIntent);
+router.add('POST', '/stripe/payment-intents/:id/capture', capturePaymentIntent);
+router.add('GET', '/stripe/payment-intents/:id', getPaymentIntent);
+
+router.add('GET', '/.well-known/apple-developer-merchantid-domain-association', applePayDomainAssociation);
 
 export default router;
