@@ -83,7 +83,7 @@ describe('routes/webhooks/stripe', () => {
     assert.equal(orderBody.items[0].price.currency, 'USD');
   });
 
-  it('extracts urlKey from item URL', async () => {
+  it('extracts path from item URL', async () => {
     const event = makeSessionEvent();
     const verifyStub = sinon.stub().resolves(event);
     fetchStub.resolves(new Response('{"order":{}}'));
@@ -96,7 +96,7 @@ describe('routes/webhooks/stripe', () => {
     await handler(request, { env: WEBHOOK_ENV });
 
     const orderBody = JSON.parse(fetchStub.firstCall.args[1].body);
-    assert.equal(orderBody.items[0].urlKey, 'sku1');
+    assert.equal(orderBody.items[0].path, 'sku1');
   });
 
   it('stores media reference in custom.image', async () => {
@@ -228,7 +228,7 @@ describe('routes/webhooks/stripe', () => {
     const orderBody = JSON.parse(fetchStub.firstCall.args[1].body);
     assert.equal(orderBody.items[0].custom.image, '');
     assert.equal(orderBody.items[0].custom.url, '');
-    assert.equal(orderBody.items[0].urlKey, '');
+    assert.equal(orderBody.items[0].path, '');
     assert.equal(orderBody.items[0].price.currency, 'USD');
   });
 

@@ -23,7 +23,7 @@ describe('utils/order', () => {
       assert.equal(result.items[0].quantity, 2);
       assert.equal(result.items[0].price.final, '29.99');
       assert.equal(result.items[0].price.currency, 'USD');
-      assert.equal(result.items[0].urlKey, 'sku1');
+      assert.equal(result.items[0].path, 'sku1');
       assert.equal(result.items[0].custom.image, 'media_abc123.jpg');
       assert.equal(result.items[0].custom.url, '/products/test-product/sku1');
     });
@@ -47,17 +47,17 @@ describe('utils/order', () => {
 
       assert.equal(result.items[0].custom.image, '');
       assert.equal(result.items[0].custom.url, '');
-      assert.equal(result.items[0].urlKey, '');
+      assert.equal(result.items[0].path, '');
     });
 
-    it('extracts urlKey from url path', () => {
+    it('extracts path from url path', () => {
       const result = buildOrderPayload({
         customer: { email: 'test@example.com' },
         shipping: {},
         items: [{ sku: 'A', name: 'Item', quantity: 1, price: 10, url: '/products/my-product/variant-1' }],
       });
 
-      assert.equal(result.items[0].urlKey, 'variant-1');
+      assert.equal(result.items[0].path, 'variant-1');
     });
 
     it('converts price to string', () => {
